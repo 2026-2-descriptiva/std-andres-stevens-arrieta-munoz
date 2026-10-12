@@ -9,4 +9,18 @@ def pregunta_04():
         [("01", 3), ("02", 4), ("03", 2), ...]
     """
 
-    raise NotImplementedError
+    from pathlib import Path
+
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    INPUT_FILE = DATA_DIRECTORY / "data.csv.gz"
+
+    df = pd.read_csv(INPUT_FILE, compression="gzip", sep="\t", header=None)
+
+    month_counts = df.iloc[:, 2].str[5:7].value_counts().sort_index()
+
+    return list(month_counts.items())
+    
+if __name__ == "__main__":
+    print(pregunta_04())

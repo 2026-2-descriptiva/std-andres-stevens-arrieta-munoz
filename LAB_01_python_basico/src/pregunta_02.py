@@ -8,5 +8,18 @@ def pregunta_02():
 
         [("A", 8), ("B", 7), ("C", 5), ...]
     """
+    from pathlib import Path
 
-    raise NotImplementedError
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    INPUT_FILE = DATA_DIRECTORY / "data.csv.gz"
+
+    df = pd.read_csv(INPUT_FILE, compression="gzip", sep="\t", header=None)
+
+    counts = df.iloc[:, 0].value_counts().sort_index()
+
+    return list(counts.items())
+
+if __name__ == "__main__":
+    print(pregunta_02())
