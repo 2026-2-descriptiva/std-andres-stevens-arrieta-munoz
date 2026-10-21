@@ -12,5 +12,16 @@ def pregunta_07():
         C    27
         ...
     """
+    from pathlib import Path
 
-    raise NotImplementedError
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    INPUT_FILE = DATA_DIRECTORY / "tbl0.tsv"
+
+    df = pd.read_csv(INPUT_FILE, sep="\t")
+    result = df.groupby("c1")["c2"].sum()
+    return result
+
+if __name__ == "__main__":
+    print(pregunta_07())

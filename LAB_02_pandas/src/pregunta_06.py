@@ -8,5 +8,20 @@ def pregunta_06():
 
         ["A", "B", "C", "D", "E", "F", "G"]
     """
+    from pathlib import Path
 
-    raise NotImplementedError
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    INPUT_FILE = DATA_DIRECTORY / "tbl1.tsv"
+
+    df = pd.read_csv(INPUT_FILE, sep="\t")
+
+    result = df["c4"].str.upper().sort_values().unique().tolist()
+
+    return result
+
+if __name__ == "__main__":
+
+    print(pregunta_06())
+

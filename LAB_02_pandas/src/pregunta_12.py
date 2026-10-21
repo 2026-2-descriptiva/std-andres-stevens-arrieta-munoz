@@ -15,4 +15,18 @@ def pregunta_12():
         ...
     """
 
-    raise NotImplementedError
+    from pathlib import Path
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    INPUT_FILE = DATA_DIRECTORY / "tbl2.tsv"
+
+    df = pd.read_csv(INPUT_FILE, sep="\t")
+
+    result = df.groupby("c0").apply(lambda x: ",".join(sorted(x["c5a"] + ":" + x["c5b"].astype(str)))).reset_index()
+    result = result.rename(columns={0: "c5"}).sort_values("c0").reset_index(drop=True)
+
+    return result
+
+if __name__ == "__main__":
+    print(pregunta_12())
