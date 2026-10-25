@@ -26,4 +26,32 @@ def pregunta_01():
         ...
     """
 
-    raise NotImplementedError
+    import re
+    from pathlib import Path
+    import pandas as pd
+
+    DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "data"
+    TRAIN_DIRECTORY = DATA_DIRECTORY / "train"
+    TEST_DIRECTORY = DATA_DIRECTORY / "test"
+    SUBMISSION_DIRECTORY = Path(__file__).resolve().parent.parent / "submission"
+
+    def build_dataset(directory: Path) -> pd.DataFrame:
+        data = []
+        for sentiment_dir in sorted(directory.iterdir()):
+            if sentiment_dir.is_dir():
+                sentiment = sentiment_dir.name
+                for file_path in sorted(sentiment_dir.glob("*.txt")):
+                    phrase = file_path.read_text(encoding="utf-8").strip()
+                    data.append({"phrase": phrase, "target": sentiment})
+        return pd.DataFrame(data)
+
+    train_dataset = build_dataset(TRAIN_DIRECTORY)
+    test_dataset = build_dataset(TEST_DIRECTORY)
+
+    train_dataset.to_csv(SUBMISSION_DIRECTORY / "train_dataset.csv", index=False)
+    test_dataset.to_csv(SUBMISSION_DIRECTORY / "test_dataset.csv", index=False) 
+
+
+if __name__ == "__main__":
+    pregunta_01()
+
