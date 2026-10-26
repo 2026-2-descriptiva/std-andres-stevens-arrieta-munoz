@@ -43,4 +43,48 @@ def clean_campaign_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         ...
     """
 
-    raise NotImplementedError
+    from pathlib import Path
+    import pandas as pd
+
+    BASE_DIRECTORY = Path(__file__).resolve().parent.parent
+    INPUT_FILE = BASE_DIRECTORY / "data" 
+    OUTPUT_FILE = BASE_DIRECTORY / "submission"
+
+    # Leer todos los archivos comprimidos y concatenarlos en un solo DataFrame
+    all_files = list(INPUT_FILE.glob("bank-marketing-campaing-*.csv.gz"))
+
+    df = pd.concat((pd.read_csv(f, compression='gzip') for f in all_files), ignore_index=True)
+
+    # Crear la tabla client
+    client = df[['client_id', 'age', 'job', 'marital', 'education', 'credit_default', 'mortgage']].copy() 
+
+    client['job'] = client['job'].str.replace('.', '', regex=False).str.replace('-', '_', regex=False)
+    client['education'] = client['education'].str.replace('.', '_', regex=False).replace('unknown', pd.NA)
+    client['credit_default'] = client['credit_default'].apply(lambda x: 1 if x == 'yes' else 0)
+    client['mortgage'] = client['mortgage'].apply(lambda x: 1 if x == 'yes' else 0) 
+
+    # Crear la tabla campaign
+    campaign = df[['client_id', 'number_contacts', 'contact_duration', 'previous_campaign_contacts', 'previous_outcome', 'campaign_outcome', 'month', 'day']].copy()  
+
+    campaign['previous_outcome'] = campaign['previous_outcome'].apply(lambda x: 1 if x == 'success' else 0)
+    campaign['campaign_outcome'] = campaign['campaign_outcome'].apply(lambda x: 1 if x == 'yes' else 0)
+    campaign['last_contact_date'] = pd.to_datetime(campaign['month'].astype(str) + '-' + campaign['day'].astype(str) + '-2022', format='%b-%d-%Y')    
+
+    campaign = campaign.drop(columns=['month', 'day'])
+
+    # Crear la tabla economics
+    economics = df[['client_id', 'cons_price_idx', 'euribor_three_months']].copy()
+
+    # Guardar las tablas como CSV sin comprimir en submission/
+    client.to_csv(OUTPUT_FILE / 'client.csv', index=False)
+
+    campaign.to_csv(OUTPUT_FILE / 'campaign.csv', index=False)
+
+    economics.to_csv(OUTPUT_FILE / 'economics.csv', index=False)
+
+    return client, campaign, economics
+
+if __name__ == "__main__":
+    clean_campaign_data()
+
+
