@@ -80,4 +80,121 @@ def pregunta_01():
         }
     """
 
-    raise NotImplementedError
+    import json
+    from pathlib import Path
+ 
+    import numpy as np
+    import pandas as pd
+ 
+    BASE_DIRECTORY = Path(__file__).resolve().parent.parent
+    INPUT_FILE = BASE_DIRECTORY / "data" / "insurance.csv.gz"
+    OUTPUT_DIRECTORY = BASE_DIRECTORY / "submission"
+    OUTPUT_FILE = OUTPUT_DIRECTORY / "insurance_published.csv"
+    REPORT_FILE = OUTPUT_DIRECTORY / "privacy_report.json"
+ 
+    K = 5
+    COLUMNS = ["age", "sex", "bmi", "children", "smoker", "region", "charges"]
+ 
+    # Cargar los datos (con o sin fila de encabezado)
+    df = pd.read_csv(INPUT_FILE, compression="gzip")
+    if "age" not in df.columns:
+        df = pd.read_csv(INPUT_FILE, compression="gzip", header=None, names=COLUMNS)
+    df = df.reset_index(drop=True)
+ 
+    # Cuasi-identificadores originales, sin generalizar
+    original_qi = ["age", "sex", "bmi", "children", "region"]
+    original_sizes = df.groupby(original_qi, observed=True).size()
+    original_k = int(original_sizes.min())
+    original_unique_records = int((original_sizes == 1).sum())
+ 
+    # Generalización
+    df["age_group"] = pd.cut(
+        df["age"],
+        bins=[-np.inf, 30, 40, 50, np.inf],
+        labels=["18-29", "30-39", "40-49", "50-64"],
+        right=False,
+    ).astype(str)
+ 
+    df["bmi_group"] = pd.cut(
+        df["bmi"],
+        bins=[-np.inf, 18.5, 25, 30, np.inf],
+        labels=["bajo peso", "normal", "sobrepeso", "obesidad"],
+        right=False,
+    ).astype(str)
+ 
+    df["children_group"] = pd.cut(
+        df["children"],
+        bins=[-np.inf, 1, 3, np.inf],
+        labels=["0", "1-2", "3+"],
+        right=False,
+    ).astype(str)
+ 
+    df["is_smoker"] = df["smoker"].astype(str).str.lower().eq("yes")
+ 
+    schemes_definition = {
+        "with_children": ["age_group", "sex", "bmi_group", "children_group", "region"],
+        "without_children": ["age_group", "sex", "bmi_group", "region"],
+    }
+ 
+    schemes = {}
+    published_masks = {}
+ 
+    for name, quasi_identifiers in schemes_definition.items():
+        grouped = df.groupby(quasi_identifiers, observed=True)
+        class_size = grouped["is_smoker"].transform("size")
+        class_smokers = grouped["is_smoker"].transform("sum")
+ 
+        published = class_size >= K
+        no_diversity = published & ((class_smokers == 0) | (class_smokers == class_size))
+ 
+        sizes = grouped.size()
+        published_sizes = sizes[sizes >= K]
+ 
+        smoker_per_class = grouped["is_smoker"].agg(["size", "sum"])
+        smoker_per_class = smoker_per_class[smoker_per_class["size"] >= K]
+        classes_without_diversity = (
+            (smoker_per_class["sum"] == 0)
+            | (smoker_per_class["sum"] == smoker_per_class["size"])
+        ).sum()
+ 
+        schemes[name] = {
+            "quasi_identifiers": quasi_identifiers,
+            "equivalence_classes": int(len(sizes)),
+            "k_before_suppression": int(sizes.min()),
+            "suppressed_records": int((~published).sum()),
+            "published_records": int(published.sum()),
+            "published_classes": int(len(published_sizes)),
+            "classes_without_smoker_diversity": int(classes_without_diversity),
+            "records_without_smoker_diversity": int(no_diversity.sum()),
+        }
+        published_masks[name] = published
+ 
+    selected_scheme = min(
+        schemes, key=lambda name: schemes[name]["suppressed_records"]
+    )
+    mask = published_masks[selected_scheme]
+    published_df = df.loc[mask]
+ 
+    report = {
+        "original_k": original_k,
+        "original_unique_records": original_unique_records,
+        "schemes": schemes,
+        "selected_scheme": selected_scheme,
+        "mean_charges_original": float(df["charges"].mean()),
+        "mean_charges_published": float(published_df["charges"].mean()),
+        "smoker_rate_original": float(df["is_smoker"].mean()),
+        "smoker_rate_published": float(published_df["is_smoker"].mean()),
+    }
+ 
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+ 
+    output_columns = schemes_definition[selected_scheme] + ["smoker", "charges"]
+    published_df[output_columns].to_csv(OUTPUT_FILE, index=False)
+ 
+    with open(REPORT_FILE, "w", encoding="utf-8") as file:
+        json.dump(report, file, ensure_ascii=False, indent=2)
+ 
+    return report
+
+if __name__ == "__main__":
+    report = pregunta_01()
