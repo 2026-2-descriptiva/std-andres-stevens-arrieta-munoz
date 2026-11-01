@@ -27,3 +27,8 @@
 --
 --  Escriba su consulta debajo de esta línea.
 --
+select tbl1.K0, AVG(tbl2.c21) AS "avg(c21)"
+from tbl1
+inner join tbl2 on tbl1.K1 = tbl2.K1
+where tbl1.c13 > 400
+group by tbl1.K0;

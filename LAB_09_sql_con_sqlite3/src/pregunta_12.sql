@@ -25,3 +25,6 @@
 --
 --  Escriba su consulta debajo de esta línea.
 --
+ select K0, MAX(c12) AS "MAX(c12)", MIN(c12) AS "min(C12)"
+ from tbl1
+ group by K0
