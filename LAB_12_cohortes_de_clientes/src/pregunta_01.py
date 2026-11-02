@@ -43,5 +43,75 @@ def build_cohort_analysis() -> pd.DataFrame:
         2022-01,1,26,100,0.26
         ...
     """
+    from pathlib import Path
 
-    raise NotImplementedError
+    BASE_DIRECTORY = Path(__file__).resolve().parent.parent
+    INPUT_FILE = BASE_DIRECTORY / "data" / "sales.csv.gz"
+    OUTPUT_DIRECTORY = BASE_DIRECTORY / "submission"
+
+    # Leer los datos de ventas
+    sales_df = pd.read_csv(INPUT_FILE, parse_dates=["OrderDate"])
+
+    # Crear la columna cohort_month
+    sales_df["cohort_month"] = sales_df.groupby("CustomerID")["OrderDate"].transform(
+        lambda x: x.min().strftime("%Y-%m")
+    )
+
+    # Crear la columna period_index
+    sales_df["period_index"] = (
+        (sales_df["OrderDate"].dt.year - sales_df["cohort_month"].str[:4].astype(int)) * 12
+        + (sales_df["OrderDate"].dt.month - sales_df["cohort_month"].str[5:7].astype(int))
+    )
+
+    # Calcular active_customers y cohort_size
+    cohort_data = (
+        sales_df.groupby(["cohort_month", "period_index"])["CustomerID"]
+        .nunique()
+        .reset_index(name="active_customers")
+    )
+    cohort_sizes = (
+        cohort_data[cohort_data["period_index"] == 0][["cohort_month", "active_customers"]]
+        .rename(columns={"active_customers": "cohort_size"})
+    )
+    cohort_data = cohort_data.merge(cohort_sizes, on="cohort_month")
+
+    # Calcular retention_rate
+    cohort_data["retention_rate"] = (
+        cohort_data["active_customers"] / cohort_data["cohort_size"]
+    )
+
+    # Guardar el archivo CSV
+    OUTPUT_CSV_FILE = OUTPUT_DIRECTORY / "cohort_retention.csv"
+    cohort_data.to_csv(OUTPUT_CSV_FILE, index=False)
+
+    # Crear el mapa de calor
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    heatmap_data = cohort_data.pivot(
+        index="cohort_month", columns="period_index", values="retention_rate"
+    )
+    
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(
+        heatmap_data,
+        annot=True,
+        fmt=".0%",
+        cmap="YlGnBu",
+        cbar_kws={"label": "Retention Rate"},
+        linewidths=0.5,
+        linecolor="gray",
+        mask=heatmap_data.isnull(),
+    )
+    plt.title("Cohort Retention Rate Heatmap")
+    plt.ylabel("Cohort Month")
+    plt.xlabel("Period Index")
+
+    # Guardar el mapa de calor como PNG
+    OUTPUT_PNG_FILE = OUTPUT_DIRECTORY / "cohort_retention_heatmap.png"
+    plt.savefig(OUTPUT_PNG_FILE, bbox_inches="tight")
+
+    return cohort_data
+
+if __name__ == "__main__":
+    build_cohort_analysis()

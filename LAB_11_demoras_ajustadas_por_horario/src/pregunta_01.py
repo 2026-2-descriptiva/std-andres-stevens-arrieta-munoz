@@ -59,8 +59,6 @@ def pregunta_01() -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     from pathlib import Path
  
-    import numpy as np
- 
     BASE_DIRECTORY = Path(__file__).resolve().parent.parent
     INPUT_FILE = BASE_DIRECTORY / "data" / "flights_by_carrier_day_hour.csv.gz"
     OUTPUT_DIRECTORY = BASE_DIRECTORY / "submission"
