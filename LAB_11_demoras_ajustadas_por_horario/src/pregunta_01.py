@@ -57,5 +57,101 @@ def pregunta_01() -> tuple[pd.DataFrame, pd.DataFrame]:
         EV,819223,...,1,1
         ...
     """
+    from pathlib import Path
+ 
+    import numpy as np
+ 
+    BASE_DIRECTORY = Path(__file__).resolve().parent.parent
+    INPUT_FILE = BASE_DIRECTORY / "data" / "flights_by_carrier_day_hour.csv.gz"
+    OUTPUT_DIRECTORY = BASE_DIRECTORY / "submission"
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
-    raise NotImplementedError
+    # Leer el archivo de entrada
+    df = pd.read_csv(INPUT_FILE)
+
+    # Paso 1: Calcular la tasa nacional de demora por hora
+    hourly_delay_rates = (
+        df.groupby("scheduled_departure_hour")
+         .agg(
+               operated_flights=("operated_flights", "sum"),
+               delayed_departure_15_flights=("delayed_departure_15_flights", "sum"),
+         ) ) .reset_index()
+
+    hourly_delay_rates["delay_rate"] = ( 
+         hourly_delay_rates["delayed_departure_15_flights"] / 
+         hourly_delay_rates["operated_flights"]
+      )
+
+      # Guardar el archivo hourly_delay_rates.csv
+    hourly_delay_rates.to_csv(
+         OUTPUT_DIRECTORY / "hourly_delay_rates.csv", index=False
+      )
+
+      # Paso 2: Calcular las demoras esperadas por aerolínea
+    df = df.merge(
+            hourly_delay_rates[["scheduled_departure_hour", "delay_rate"]],
+            on="scheduled_departure_hour",
+            how="left"
+         )
+
+    df["expected_delayed_flights"] = (
+         df["operated_flights"] * df["delay_rate"]
+      )  
+
+    results = (
+         df.groupby("reporting_airline")
+          .agg(
+                operated_flights=("operated_flights", "sum"),
+                delayed_departure_15_flights=("delayed_departure_15_flights", "sum"),
+                expected_delayed_flights=("expected_delayed_flights", "sum"),
+          ) ) .reset_index()
+
+    results["delay_rate"] = (
+         results["delayed_departure_15_flights"] / 
+         results["operated_flights"]
+      )
+
+    results["observed_to_expected_ratio"] = (
+         results["delayed_departure_15_flights"] / 
+         results["expected_delayed_flights"]
+      )
+
+      # Filtrar aerolíneas con al menos 100,000 vuelos operados
+    results = results[results["operated_flights"] >= 100000]
+
+      # Calcular los rankings
+    results["crude_rank"] = results["delay_rate"].rank(ascending=False, method="min").astype(int)
+    results["adjusted_rank"] = results["observed_to_expected_ratio"].rank(ascending=False, method="min").astype(int)
+
+    results = results[
+        [
+            "reporting_airline",
+            "operated_flights",
+            "delayed_departure_15_flights",
+            "delay_rate",
+            "expected_delayed_flights",
+            "observed_to_expected_ratio",
+            "crude_rank",
+            "adjusted_rank",
+        ]
+    ].sort_values("adjusted_rank").reset_index(drop=True)
+    
+      # Guardar el archivo carrier_adjusted_delays.csv
+    results.to_csv(
+            OUTPUT_DIRECTORY / "carrier_adjusted_delays.csv", index=False
+         )
+
+    return hourly_delay_rates, results
+
+if __name__ == "__main__":
+    pregunta_01()
+
+
+    
+
+    
+
+
+
+
+    
