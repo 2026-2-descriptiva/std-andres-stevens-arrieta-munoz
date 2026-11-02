@@ -60,5 +60,120 @@ def pregunta_01() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         letter,28138,...
         ...
     """
+    from pathlib import Path
+ 
+    import numpy as np
+ 
+    BASE_DIRECTORY = Path(__file__).resolve().parent.parent
+    DATA_DIRECTORY = BASE_DIRECTORY / "data"
+    OUTPUT_DIRECTORY = BASE_DIRECTORY / "submission"
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+ 
+    # Leer cada canal, eliminar filas idénticas y asignar el nombre del canal
+    channels = {
+        "web": "historical_requests_web.csv.gz",
+        "letter": "historical_requests_letter.csv.gz",
+    }
+    frames = []
+    for channel, file_name in channels.items():
+        data = pd.read_csv(DATA_DIRECTORY / file_name).drop_duplicates()
+        data["channel"] = channel
+        frames.append(data)
+ 
+    combined_data = pd.concat(frames, ignore_index=True)
+    combined_data["in_date"] = pd.to_datetime(combined_data["in_date"])
+    combined_data["out_date"] = pd.to_datetime(
+        combined_data["out_date"], errors="coerce"
+    )
+ 
+    # Días calendario y días hábiles (lunes a viernes, sin festivos)
+    answered = combined_data["out_date"].notna()
+    combined_data["calendar_days"] = (
+        combined_data["out_date"] - combined_data["in_date"]
+    ).dt.days
+ 
+    combined_data["business_days"] = np.nan
+    combined_data.loc[answered, "business_days"] = np.busday_count(
+        (combined_data.loc[answered, "in_date"] + pd.Timedelta(days=1))
+        .to_numpy(dtype="datetime64[D]"),
+        (combined_data.loc[answered, "out_date"] + pd.Timedelta(days=1))
+        .to_numpy(dtype="datetime64[D]"),
+    )
+ 
+    # Cumple el plazo: respondida en 15 días hábiles o menos
+    combined_data["on_time"] = answered & (combined_data["business_days"] <= 15)
+    combined_data["year"] = combined_data["in_date"].dt.year
+ 
+    # Resumen por canal (orden alfabético: letter, web)
+    channel_summary = (
+        combined_data.groupby("channel")
+        .agg(
+            requests=("in_date", "size"),
+            answered=("out_date", "count"),
+            median_business_days=("business_days", "median"),
+            on_time_rate=("on_time", "mean"),
+        )
+        .reset_index()
+    )
+    channel_summary["pending"] = (
+        channel_summary["requests"] - channel_summary["answered"]
+    )
+    channel_summary = channel_summary[
+        [
+            "channel",
+            "requests",
+            "answered",
+            "pending",
+            "median_business_days",
+            "on_time_rate",
+        ]
+    ]
+ 
+    # Resumen por año de entrada y canal
+    yearly_summary = (
+        combined_data.groupby(["year", "channel"])
+        .agg(
+            requests=("in_date", "size"),
+            answered=("out_date", "count"),
+            on_time_rate=("on_time", "mean"),
+        )
+        .reset_index()
+    )
+    yearly_summary["pending"] = yearly_summary["requests"] - yearly_summary["answered"]
+    yearly_summary = yearly_summary[
+        ["year", "channel", "requests", "pending", "on_time_rate"]
+    ].sort_values(["year", "channel"])
+ 
+    # Resumen por día de entrada, de lunes a domingo, con los dos canales juntos
+    day_order = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
+    entry_day_summary = (
+        combined_data.groupby("day_name")
+        .agg(
+            requests=("in_date", "size"),
+            median_calendar_days=("calendar_days", "median"),
+            median_business_days=("business_days", "median"),
+        )
+        .reindex(day_order)
+        .reset_index()
+    )
+ 
+    # Guardar los resultados
+    channel_summary.to_csv(OUTPUT_DIRECTORY / "channel_summary.csv", index=False)
+    yearly_summary.to_csv(OUTPUT_DIRECTORY / "yearly_summary.csv", index=False)
+    entry_day_summary.to_csv(OUTPUT_DIRECTORY / "entry_day_summary.csv", index=False)
+ 
+    return channel_summary, yearly_summary, entry_day_summary
+ 
+ 
+if __name__ == "__main__":
+    pregunta_01()
 
-    raise NotImplementedError
+
